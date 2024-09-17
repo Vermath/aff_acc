@@ -8,12 +8,12 @@ from crawl4ai.crawler_strategy import LocalSeleniumCrawlerStrategy
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
 from openai import OpenAI
 from io import BytesIO
 from urllib.parse import urlparse
 import logging
 import subprocess
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,38 +24,37 @@ openai_client = OpenAI(
     api_key=st.secrets["openai_api_key"],  # Ensure this is correctly set in secrets.toml
 )
 
-# Function to verify Chromium and Chromedriver installations
-def verify_installations():
-    st.subheader("🔍 Installation Verification")
-    
-    # Check Chromium Browser
-    st.write("### Chromium Browser")
+# Function to verify Chromium installation
+def verify_chromium():
+    st.subheader("🔍 Chromium Installation Verification")
     try:
         result = subprocess.run(['chromium', '--version'], capture_output=True, text=True, check=True)
         version = result.stdout.strip()
         st.code(version)
+        return True
     except subprocess.CalledProcessError as e:
         st.error(f"🔴 Chromium not found or error occurred: {e}")
         return False
     except FileNotFoundError:
         st.error("🔴 Chromium binary not found.")
         return False
-    
-    # Check Chromedriver
-    st.write("### Chromedriver")
-    try:
-        result = subprocess.run(['chromedriver', '--version'], capture_output=True, text=True, check=True)
-        version = result.stdout.strip()
-        st.code(version)
-    except subprocess.CalledProcessError as e:
-        st.error(f"🔴 Chromedriver not found or error occurred: {e}")
-        return False
-    except FileNotFoundError:
+
+# Function to verify Chromedriver installation
+def verify_chromedriver():
+    st.subheader("🔍 Chromedriver Installation Verification")
+    chromedriver_path = shutil.which("chromedriver")
+    if chromedriver_path:
+        try:
+            result = subprocess.run(['chromedriver', '--version'], capture_output=True, text=True, check=True)
+            version = result.stdout.strip()
+            st.code(version)
+            return True
+        except subprocess.CalledProcessError as e:
+            st.error(f"🔴 Chromedriver error: {e}")
+            return False
+    else:
         st.error("🔴 Chromedriver binary not found.")
         return False
-    
-    st.success("🟢 **Chromium** and **Chromedriver** are installed correctly.")
-    return True
 
 # Utility function to clean text
 def clean_text(text):
@@ -140,16 +139,12 @@ def is_valid_url(url):
 def main():
     st.title("🔗 URL Processor and Data Extractor")
 
-    st.markdown("""
-    ### 📄 Upload a CSV, Enter URLs Manually, or Paste a List of URLs
-    - **Upload CSV**: Provide a CSV file with a 'URL' column.
-    - **Manual Entry**: Enter URLs one-by-one.
-    - **Paste List**: Paste a list of URLs separated by commas, newlines, or spaces.
-    """)
-
     # Verify Chromium and Chromedriver installation
-    if not verify_installations():
-        st.stop()  # Stop the app if installations are not verified
+    chromium_ok = verify_chromium()
+    chromedriver_ok = verify_chromedriver()
+    if not (chromium_ok and chromedriver_ok):
+        st.error("🔴 Chromium or Chromedriver is not installed correctly. Please check your setup.")
+        st.stop()
 
     # Configure Selenium to run Chromium in headless mode
     chrome_options = Options()
@@ -158,10 +153,17 @@ def main():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.binary_location = shutil.which("chromium")  # Automatically find the chromium binary
 
-    # Initialize WebDriver using webdriver-manager
+    # Locate system-installed Chromedriver
+    chromedriver_path = shutil.which("chromedriver")
+    if not chromedriver_path:
+        st.error("🔴 Chromedriver not found in system PATH.")
+        st.stop()
+
+    # Initialize WebDriver
     try:
-        service = Service(ChromeDriverManager().install())
+        service = Service(chromedriver_path)
         driver = webdriver.Chrome(service=service, options=chrome_options)
         crawler_strategy = LocalSeleniumCrawlerStrategy(driver=driver)
         crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
