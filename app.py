@@ -4,8 +4,7 @@ import json
 import re
 import unicodedata
 import streamlit as st
-from crawl4ai import WebCrawler, LocalSeleniumCrawl
-from selenium.webdriver.chrome.options import Options
+from crawl4ai import WebCrawler  # Removed LocalSeleniumCrawl
 from openai import OpenAI
 from io import StringIO, BytesIO
 from urllib.parse import urlparse
@@ -20,15 +19,8 @@ openai_client = OpenAI(
     api_key=st.secrets["openai_api_key"],
 )
 
-# Configure Selenium to run Chrome in headless mode
-chrome_options = Options()
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-
-# Initialize Crawl4AI WebCrawler with headless Chrome options via LocalSeleniumCrawl strategy
-crawler_strategy = LocalSeleniumCrawl(options=chrome_options)
-crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
+# Initialize Crawl4AI WebCrawler with default settings
+crawler = WebCrawler(verbose=False)
 crawler.warmup()
 
 # Utility function to clean text
