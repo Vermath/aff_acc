@@ -19,12 +19,22 @@ chromium --version
 echo "Verifying Chromium Driver installation..."
 chromium-driver --version
 
+echo "Finding Chromium Driver path..."
+CHROMIUM_DRIVER_PATH=$(which chromium-driver)
+
+if [ -z "$CHROMIUM_DRIVER_PATH" ]; then
+    echo "chromium-driver not found in PATH."
+    exit 1
+else
+    echo "chromium-driver found at: $CHROMIUM_DRIVER_PATH"
+fi
+
 echo "Creating Chromium Driver symlink in the correct user directory..."
 RUNNING_USER=$(whoami)
 CHROMIUM_DRIVER_VERSION=$(chromium-driver --version | grep -oP '\d+\.\d+\.\d+')
 EXPECTED_CHROMIUM_DRIVER_PATH="/home/${RUNNING_USER}/.cache/selenium/chromedriver/linux64/${CHROMIUM_DRIVER_VERSION}/chromedriver"
 
 mkdir -p "$(dirname "$EXPECTED_CHROMIUM_DRIVER_PATH")"
-ln -sf /usr/bin/chromium-driver "$EXPECTED_CHROMIUM_DRIVER_PATH"
+ln -sf "$CHROMIUM_DRIVER_PATH" "$EXPECTED_CHROMIUM_DRIVER_PATH"
 
 echo "Setup completed successfully."

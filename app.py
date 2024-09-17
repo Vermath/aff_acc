@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI Client
 openai_client = OpenAI(
-    api_key=st.secrets["openai_api_key"],
+    api_key=st.secrets["openai"]["api_key"],
 )
 
 # Function to verify Chromium and Chromium Driver installation
@@ -96,7 +96,7 @@ def extract_linkworthy_items(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4",  # Use a supported model if 'gpt-4o-mini' is invalid
+            model="gpt-4o-mini",  # Updated model
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -140,7 +140,7 @@ def extract_title(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4",  # Use a supported model if 'gpt-4o-mini' is invalid
+            model="gpt-4o-mini",  # Updated model
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -205,7 +205,7 @@ def verify_chromedriver():
 # Streamlit App
 def main():
     st.title("URL Processor and Data Extractor")
-
+    
     st.markdown("""
     ### Upload a CSV, Enter URLs Manually, or Paste a List of URLs
     - **Upload CSV**: Provide a CSV file with a 'URL' column.
@@ -213,7 +213,7 @@ def main():
     - **Paste List**: Paste a list of URLs separated by commas, newlines, or spaces.
     """)
 
-    # Verify Chromium Driver installation
+    # Verify Chromium and Chromium Driver installation
     verify_installations()
     verify_chromedriver()
 
