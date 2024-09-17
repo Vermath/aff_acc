@@ -5,6 +5,7 @@ import re
 import unicodedata
 import streamlit as st
 from crawl4ai import WebCrawler
+from selenium.webdriver.chrome.options import Options
 from openai import OpenAI
 from io import StringIO, BytesIO
 
@@ -13,8 +14,14 @@ openai_client = OpenAI(
     api_key=st.secrets["openai_api_key"],
 )
 
-# Initialize Crawl4AI WebCrawler with default Selenium-based strategy
-crawler = WebCrawler(verbose=False)
+# Configure Selenium to run Chrome in headless mode
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+
+# Initialize Crawl4AI WebCrawler with headless Chrome options
+crawler = WebCrawler(verbose=False, options=chrome_options)
 crawler.warmup()
 
 # Utility function to clean text
@@ -136,6 +143,19 @@ def parse_pasted_urls(urls_text):
     urls = [url.strip() for url in urls if url.strip()]
     return urls
 
+# Function to validate URLs
+from urllib.parse import urlparse
+
+def is_valid_url(url):
+    """
+    Validates the URL format.
+    """
+    try:
+        result = urlparse(url)
+        return all([result.scheme, result.netloc])
+    except:
+        return False
+
 # Streamlit App
 def main():
     st.title("URL Processor and Data Extractor")
@@ -174,29 +194,41 @@ def main():
                     st.error("CSV file must contain a 'URL' column.")
                 else:
                     uploaded_urls = df_input['URL'].dropna().tolist()
-                    urls.extend(uploaded_urls)
-                    st.success(f"Loaded {len(uploaded_urls)} URLs from the uploaded CSV.")
+                    # Validate URLs
+                    valid_uploaded_urls = [url for url in uploaded_urls if is_valid_url(url)]
+                    invalid_uploaded_urls = [url for url in uploaded_urls if not is_valid_url(url)]
+                    urls.extend(valid_uploaded_urls)
+                    st.success(f"Loaded {len(valid_uploaded_urls)} valid URLs from the uploaded CSV.")
+                    if invalid_uploaded_urls:
+                        st.warning(f"{len(invalid_uploaded_urls)} invalid URLs were skipped from the uploaded CSV.")
             except Exception as e:
                 st.error(f"Error reading CSV file: {e}")
 
         # Handle manual entry
         if manual_url:
-            urls.append(manual_url)
-            st.success("Added manually entered URL.")
+            if is_valid_url(manual_url):
+                urls.append(manual_url)
+                st.success("Added manually entered URL.")
+            else:
+                st.warning("The manually entered URL is invalid and was skipped.")
 
         # Handle pasted URLs
         if pasted_urls:
             parsed_urls = parse_pasted_urls(pasted_urls)
-            urls.extend(parsed_urls)
-            st.success(f"Added {len(parsed_urls)} URLs from pasted list.")
+            valid_pasted_urls = [url for url in parsed_urls if is_valid_url(url)]
+            invalid_pasted_urls = [url for url in parsed_urls if not is_valid_url(url)]
+            urls.extend(valid_pasted_urls)
+            st.success(f"Added {len(valid_pasted_urls)} valid URLs from pasted list.")
+            if invalid_pasted_urls:
+                st.warning(f"{len(invalid_pasted_urls)} invalid URLs were skipped from the pasted list.")
 
         if not urls:
-            st.error("No URLs provided. Please upload a CSV, enter URLs manually, or paste a list of URLs.")
+            st.error("No valid URLs provided. Please upload a CSV, enter URLs manually, or paste a list of URLs.")
             return
 
         # Remove duplicates
         urls = list(dict.fromkeys(urls))
-        st.write(f"Total unique URLs to process: {len(urls)}")
+        st.write(f"Total unique valid URLs to process: {len(urls)}")
 
         # Initialize lists for DataFrame
         data = {
