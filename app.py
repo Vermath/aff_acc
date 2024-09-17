@@ -77,12 +77,12 @@ def extract_linkworthy_items(scraped_content):
     full_prompt = f"{prompt}\n\nContent:\n{scraped_content}"
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4",  # Ensure the model is available
+            model="gpt-4o-mini",  # Ensure the model is available
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
             ],
-            max_tokens=500,
+            max_tokens=2000,
             n=1,
             stop=None,
             temperature=0.5,
@@ -104,12 +104,12 @@ def extract_title(scraped_content):
     full_prompt = f"{prompt}\n\nContent:\n{scraped_content}"
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4",  # Ensure the model is available
+            model="gpt-4o-mini",  # Ensure the model is available
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
             ],
-            max_tokens=100,
+            max_tokens=2000,
             n=1,
             stop=None,
             temperature=0.3,
