@@ -4,23 +4,33 @@ import json
 import re
 import unicodedata
 import streamlit as st
-from crawl4ai import WebCrawler  # Removed LocalSeleniumCrawl
+from crawl4ai import WebCrawler
+from crawl4ai.crawler_strategy import LocalSeleniumCrawlerStrategy
+from selenium.webdriver.chrome.options import Options
 from openai import OpenAI
 from io import StringIO, BytesIO
 from urllib.parse import urlparse
 import logging
+import subprocess
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize OpenAI Client with the model 'gpt-4o-mini'
+# Initialize OpenAI Client
 openai_client = OpenAI(
     api_key=st.secrets["openai_api_key"],
 )
 
-# Initialize Crawl4AI WebCrawler with default settings
-crawler = WebCrawler(verbose=False)
+# Configure Selenium to run Chrome in headless mode
+chrome_options = Options()
+chrome_options.add_argument("--headless")
+chrome_options.add_argument("--no-sandbox")
+chrome_options.add_argument("--disable-dev-shm-usage")
+
+# Initialize Crawl4AI WebCrawler with LocalSeleniumCrawlerStrategy
+crawler_strategy = LocalSeleniumCrawlerStrategy()
+crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
 crawler.warmup()
 
 # Utility function to clean text
@@ -155,6 +165,17 @@ def is_valid_url(url):
     except:
         return False
 
+# Function to verify chromedriver installation
+def verify_chromedriver():
+    """
+    Verifies that chromedriver is installed and accessible.
+    """
+    try:
+        version = subprocess.check_output(['chromedriver', '--version']).decode('utf-8').strip()
+        st.info(f"Chromedriver version: {version}")
+    except Exception as e:
+        st.error(f"Chromedriver not found or not executable: {e}")
+
 # Streamlit App
 def main():
     st.title("URL Processor and Data Extractor")
@@ -165,6 +186,9 @@ def main():
     - **Manual Entry**: Enter URLs one-by-one.
     - **Paste List**: Paste a list of URLs separated by commas, newlines, or spaces.
     """)
+
+    # Verify chromedriver installation
+    verify_chromedriver()
 
     # Initialize session state for failed URLs
     if 'failed_urls' not in st.session_state:
