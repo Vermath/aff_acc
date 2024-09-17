@@ -22,23 +22,22 @@ google-chrome --version
 
 # Install chromedriver manually to ensure compatibility
 CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
-CHROMEDRIVER_VERSION=$(wget -qO- "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_VERSION")
+CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d. -f1)
+CHROMEDRIVER_VERSION=$(wget -qO- "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_MAJOR_VERSION")
 wget https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip
 unzip chromedriver_linux64.zip
 mv chromedriver /usr/bin/chromedriver
 chmod +x /usr/bin/chromedriver
 rm chromedriver_linux64.zip
 
-# Create the expected chromedriver directory structure and symlink
 # Extract chromedriver version
 CHROMEDRIVER_FULL_VERSION=$(chromedriver --version | awk '{print $2}')
-# Extract major version
-CHROMEDRIVER_MAJOR_VERSION=$(echo $CHROMEDRIVER_FULL_VERSION | cut -d. -f1)
 
-# Define the expected path based on the error message
-EXPECTED_CHROMEDRIVER_PATH="/home/appuser/.cache/selenium/chromedriver/linux64/${CHROMEDRIVER_FULL_VERSION}/chromedriver"
+# Define the expected path based on the actual running user
+RUNNING_USER=$(whoami)
+EXPECTED_CHROMEDRIVER_PATH="/home/${RUNNING_USER}/.cache/selenium/chromedriver/linux64/${CHROMEDRIVER_FULL_VERSION}/chromedriver"
 
-# Create the directory
+# Create the directory structure
 mkdir -p "$(dirname "$EXPECTED_CHROMEDRIVER_PATH")"
 
 # Create a symlink from the installed chromedriver to the expected path
