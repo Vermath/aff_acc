@@ -5,6 +5,8 @@ import unicodedata
 import streamlit as st
 from crawl4ai import WebCrawler
 from crawl4ai.crawler_strategy import LocalSeleniumCrawlerStrategy
+from selenium import webdriver
+from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from openai import OpenAI
 from io import StringIO, BytesIO
@@ -21,16 +23,41 @@ openai_client = OpenAI(
     api_key=st.secrets["openai_api_key"],
 )
 
-# Configure Selenium to run Chrome in headless mode
+# Function to verify Chromium and Chromium Driver installation
+def verify_installations():
+    try:
+        chrome_version = subprocess.check_output(['chromium', '--version']).decode('utf-8').strip()
+        st.info(f"Chromium version: {chrome_version}")
+    except Exception as e:
+        st.error(f"Error verifying Chromium installation: {e}")
+
+    try:
+        driver_version = subprocess.check_output(['chromium-driver', '--version']).decode('utf-8').strip()
+        st.info(f"Chromium Driver version: {driver_version}")
+    except Exception as e:
+        st.error(f"Error verifying Chromium Driver installation: {e}")
+
+# Configure Selenium to run Chromium in headless mode
 chrome_options = Options()
 chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
+chrome_options.add_argument("--disable-gpu")
+chrome_options.add_argument("--window-size=1920,1080")
+chrome_options.binary_location = "/usr/bin/chromium"  # Specify Chromium binary location
 
 # Initialize Crawl4AI WebCrawler with LocalSeleniumCrawlerStrategy
-crawler_strategy = LocalSeleniumCrawlerStrategy()
-crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
-crawler.warmup()
+try:
+    service = Service('/usr/bin/chromium-driver')  # Specify Chromium Driver path
+    webdriver_instance = webdriver.Chrome(service=service, options=chrome_options)
+    
+    crawler_strategy = LocalSeleniumCrawlerStrategy(driver=webdriver_instance)
+    crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
+    crawler.warmup()
+    logger.info("Selenium WebDriver initialized successfully.")
+except Exception as e:
+    logger.error(f"Error initializing Selenium WebDriver: {e}")
+    st.error(f"Selenium initialization error: {e}")
 
 # Utility function to clean text
 def clean_text(text):
@@ -164,16 +191,16 @@ def is_valid_url(url):
     except:
         return False
 
-# Function to verify chromedriver installation
+# Function to verify Chromium Driver installation
 def verify_chromedriver():
     """
-    Verifies that chromedriver is installed and accessible.
+    Verifies that chromium-driver is installed and accessible.
     """
     try:
-        version = subprocess.check_output(['chromedriver', '--version']).decode('utf-8').strip()
-        st.info(f"Chromedriver version: {version}")
+        version = subprocess.check_output(['chromium-driver', '--version']).decode('utf-8').strip()
+        st.info(f"Chromium Driver version: {version}")
     except Exception as e:
-        st.error(f"Chromedriver not found or not executable: {e}")
+        st.error(f"Chromium Driver not found or not executable: {e}")
 
 # Streamlit App
 def main():
@@ -186,7 +213,8 @@ def main():
     - **Paste List**: Paste a list of URLs separated by commas, newlines, or spaces.
     """)
 
-    # Verify chromedriver installation
+    # Verify Chromium Driver installation
+    verify_installations()
     verify_chromedriver()
 
     # Initialize session state for failed URLs
@@ -317,3 +345,21 @@ def main():
 
         # Prepare CSV for download
         csv_buffer = BytesIO()
+        df_output.to_csv(csv_buffer, index=False)
+        csv_buffer.seek(0)
+
+        st.download_button(
+            label="Download data as CSV",
+            data=csv_buffer,
+            file_name='processed_data.csv',
+            mime='text/csv',
+        )
+
+        # Display failed URLs if any
+        if st.session_state.failed_urls:
+            st.subheader("Failed URLs")
+            for failed_url in st.session_state.failed_urls:
+                st.write(failed_url)
+
+if __name__ == "__main__":
+    main()

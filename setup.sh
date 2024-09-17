@@ -1,42 +1,30 @@
 #!/bin/bash
+# Exit immediately if a command exits with a non-zero status.
 set -e
 set -x  # Enable debugging
 
 echo "Updating package lists..."
 apt-get update
 
-echo "Installing dependencies required by Selenium and Chrome..."
-apt-get install -y wget unzip xvfb libxi6 libgconf-2-4 libnss3 libxss1 libappindicator3-1 libasound2 fonts-liberation libappindicator3-1 xdg-utils
+echo "Installing dependencies required by Selenium and Chromium..."
+apt-get install -y wget unzip xvfb libxi6 libgconf-2-4 libnss3 libxss1 \
+    libappindicator3-1 libasound2 fonts-liberation xdg-utils
 
-echo "Downloading the latest stable version of Google Chrome..."
-wget https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+echo "Installing Chromium and Chromium Driver..."
+apt-get install -y chromium chromium-driver
 
-echo "Installing Google Chrome..."
-apt-get install -y ./google-chrome-stable_current_amd64.deb
+echo "Verifying Chromium installation..."
+chromium --version
 
-echo "Removing the downloaded Chrome package..."
-rm google-chrome-stable_current_amd64.deb
+echo "Verifying Chromium Driver installation..."
+chromium-driver --version
 
-echo "Verifying Chrome installation..."
-google-chrome --version
-
-echo "Installing Chromedriver..."
-CHROME_VERSION=$(google-chrome --version | grep -oP '\d+\.\d+\.\d+')
-CHROME_MAJOR_VERSION=$(echo $CHROME_VERSION | cut -d. -f1)
-CHROMEDRIVER_VERSION=$(wget -qO- "https://chromedriver.storage.googleapis.com/LATEST_RELEASE_$CHROME_MAJOR_VERSION")
-wget https://chromedriver.storage.googleapis.com/${CHROMEDRIVER_VERSION}/chromedriver_linux64.zip
-unzip chromedriver_linux64.zip
-mv chromedriver /usr/bin/chromedriver
-chmod +x /usr/bin/chromedriver
-rm chromedriver_linux64.zip
-
-echo "Creating Chromedriver symlink in the correct user directory..."
+echo "Creating Chromium Driver symlink in the correct user directory..."
 RUNNING_USER=$(whoami)
-EXPECTED_CHROMEDRIVER_PATH="/home/${RUNNING_USER}/.cache/selenium/chromedriver/linux64/${CHROMEDRIVER_VERSION}/chromedriver"
-mkdir -p "$(dirname "$EXPECTED_CHROMEDRIVER_PATH")"
-ln -s /usr/bin/chromedriver "$EXPECTED_CHROMEDRIVER_PATH"
+CHROMIUM_DRIVER_VERSION=$(chromium-driver --version | grep -oP '\d+\.\d+\.\d+')
+EXPECTED_CHROMIUM_DRIVER_PATH="/home/${RUNNING_USER}/.cache/selenium/chromedriver/linux64/${CHROMIUM_DRIVER_VERSION}/chromedriver"
 
-echo "Installing additional fonts and utilities..."
-apt-get install -y fonts-liberation libappindicator3-1 xdg-utils
+mkdir -p "$(dirname "$EXPECTED_CHROMIUM_DRIVER_PATH")"
+ln -sf /usr/bin/chromium-driver "$EXPECTED_CHROMIUM_DRIVER_PATH"
 
 echo "Setup completed successfully."
