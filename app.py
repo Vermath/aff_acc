@@ -4,10 +4,16 @@ import json
 import re
 import unicodedata
 import streamlit as st
-from crawl4ai import WebCrawler
+from crawl4ai import WebCrawler, LocalSeleniumCrawl
 from selenium.webdriver.chrome.options import Options
 from openai import OpenAI
 from io import StringIO, BytesIO
+from urllib.parse import urlparse
+import logging
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Initialize OpenAI Client with the model 'gpt-4o-mini'
 openai_client = OpenAI(
@@ -20,8 +26,9 @@ chrome_options.add_argument("--headless")
 chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 
-# Initialize Crawl4AI WebCrawler with headless Chrome options
-crawler = WebCrawler(verbose=False, options=chrome_options)
+# Initialize Crawl4AI WebCrawler with headless Chrome options via LocalSeleniumCrawl strategy
+crawler_strategy = LocalSeleniumCrawl(options=chrome_options)
+crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
 crawler.warmup()
 
 # Utility function to clean text
@@ -86,6 +93,7 @@ def extract_linkworthy_items(scraped_content):
 
     except Exception as e:
         st.warning(f"Error during OpenAI API call for linkworthy items: {e}")
+        logger.error(f"OpenAI API Error for linkworthy items: {e}")
         return "n/a"
 
 # Function to extract title
@@ -129,6 +137,7 @@ def extract_title(scraped_content):
 
     except Exception as e:
         st.warning(f"Error during OpenAI API call for title: {e}")
+        logger.error(f"OpenAI API Error for title: {e}")
         return "n/a"
 
 # Function to parse pasted URLs
@@ -144,8 +153,6 @@ def parse_pasted_urls(urls_text):
     return urls
 
 # Function to validate URLs
-from urllib.parse import urlparse
-
 def is_valid_url(url):
     """
     Validates the URL format.
