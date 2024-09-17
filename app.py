@@ -20,13 +20,13 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI Client
 openai_client = OpenAI(
-    api_key=st.secrets["openai"]["api_key"],
+    api_key=st.secrets["openai_api_key"],  # Reverted to original key storage
 )
 
 # Function to verify Chromium and Chromium Driver installation
 def verify_installations():
     try:
-        chrome_version = subprocess.check_output(['chromium', '--version']).decode('utf-8').strip()
+        chrome_version = subprocess.check_output(['chromium-browser', '--version']).decode('utf-8').strip()
         st.info(f"Chromium version: {chrome_version}")
     except Exception as e:
         st.error(f"Error verifying Chromium installation: {e}")
@@ -44,11 +44,11 @@ chrome_options.add_argument("--no-sandbox")
 chrome_options.add_argument("--disable-dev-shm-usage")
 chrome_options.add_argument("--disable-gpu")
 chrome_options.add_argument("--window-size=1920,1080")
-chrome_options.binary_location = "/usr/bin/chromium"  # Specify Chromium binary location
+chrome_options.binary_location = "/usr/bin/chromium-browser"  # Corrected binary location
 
 # Initialize Crawl4AI WebCrawler with LocalSeleniumCrawlerStrategy
 try:
-    service = Service('/usr/bin/chromium-driver')  # Specify Chromium Driver path
+    service = Service('/usr/bin/chromium-driver')  # Corrected Chromium Driver path
     webdriver_instance = webdriver.Chrome(service=service, options=chrome_options)
     
     crawler_strategy = LocalSeleniumCrawlerStrategy(driver=webdriver_instance)
@@ -96,7 +96,7 @@ def extract_linkworthy_items(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Updated model
+            model="gpt-4o-mini",  # Set to gpt-4o-mini as per your request
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -140,7 +140,7 @@ def extract_title(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Updated model
+            model="gpt-4o-mini",  # Set to gpt-4o-mini as per your request
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
