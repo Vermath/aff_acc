@@ -1,6 +1,5 @@
 import os
 import pandas as pd
-import json
 import re
 import unicodedata
 import streamlit as st
@@ -70,7 +69,7 @@ def extract_linkworthy_items(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4",  # Use a supported model if 'gpt-4o-mini' is invalid
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -114,7 +113,7 @@ def extract_title(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4",  # Use a supported model if 'gpt-4o-mini' is invalid
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -318,36 +317,3 @@ def main():
 
         # Prepare CSV for download
         csv_buffer = BytesIO()
-        df_output.to_csv(csv_buffer, index=False)
-        csv_buffer.seek(0)
-
-        # Prepare failed URLs log
-        if st.session_state.failed_urls:
-            failed_urls_text = "\n".join(st.session_state.failed_urls)
-            failed_urls_buffer = StringIO(failed_urls_text)
-        else:
-            failed_urls_buffer = StringIO("No failed URLs.")
-
-        # Download buttons
-        st.download_button(
-            label="Download Updated CSV",
-            data=csv_buffer,
-            file_name='activities_updated.csv',
-            mime='text/csv',
-        )
-
-        if st.session_state.failed_urls:
-            st.download_button(
-                label="Download Failed URLs Log",
-                data=failed_urls_buffer,
-                file_name='failed_urls.txt',
-                mime='text/plain',
-            )
-        else:
-            st.info("All URLs processed successfully. No failed URLs to download.")
-
-        # Reset failed URLs after download
-        st.session_state.failed_urls = []
-
-if __name__ == "__main__":
-    main()

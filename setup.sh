@@ -29,6 +29,21 @@ mv chromedriver /usr/bin/chromedriver
 chmod +x /usr/bin/chromedriver
 rm chromedriver_linux64.zip
 
+# Create the expected chromedriver directory structure and symlink
+# Extract chromedriver version
+CHROMEDRIVER_FULL_VERSION=$(chromedriver --version | awk '{print $2}')
+# Extract major version
+CHROMEDRIVER_MAJOR_VERSION=$(echo $CHROMEDRIVER_FULL_VERSION | cut -d. -f1)
+
+# Define the expected path based on the error message
+EXPECTED_CHROMEDRIVER_PATH="/home/appuser/.cache/selenium/chromedriver/linux64/${CHROMEDRIVER_FULL_VERSION}/chromedriver"
+
+# Create the directory
+mkdir -p "$(dirname "$EXPECTED_CHROMEDRIVER_PATH")"
+
+# Create a symlink from the installed chromedriver to the expected path
+ln -s /usr/bin/chromedriver "$EXPECTED_CHROMEDRIVER_PATH"
+
 # Install additional fonts and utilities
 apt-get install -y fonts-liberation libappindicator3-1 xdg-utils
 
