@@ -1,7 +1,7 @@
 streamlit
 pandas
 openai
-selenium>=4.6.0
+selenium
 webdriver-manager
 git+https://github.com/unclecode/crawl4ai.git
 requests

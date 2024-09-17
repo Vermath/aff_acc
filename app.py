@@ -14,9 +14,6 @@ from io import BytesIO
 from urllib.parse import urlparse
 import logging
 import subprocess
-import requests
-import zipfile
-import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -24,105 +21,64 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI Client
 openai_client = OpenAI(
-    api_key=st.secrets["openai_api_key"],  # Original key storage
+    api_key=st.secrets["openai_api_key"],  # Ensure this is correctly set in secrets.toml
 )
 
-# Function to download Chromium
-def download_chromium(download_url, extract_path):
-    try:
-        st.info("🔄 Downloading Chromium...")
-        response = requests.get(download_url, stream=True)
-        zip_path = os.path.join(extract_path, "chromium.zip")
-        with open(zip_path, "wb") as f:
-            shutil.copyfileobj(response.raw, f)
-        st.info("📥 Chromium downloaded successfully.")
-        
-        st.info("📦 Extracting Chromium...")
-        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
-        st.info("📂 Chromium extracted successfully.")
-        
-        # Clean up the zip file
-        os.remove(zip_path)
-        
-        # Return the path to the Chromium binary
-        chromium_binary = os.path.join(extract_path, "chrome-linux", "chrome")
-        if not os.path.exists(chromium_binary):
-            raise FileNotFoundError("Chromium binary not found after extraction.")
-        
-        return chromium_binary
-    except Exception as e:
-        logger.error(f"Error downloading or extracting Chromium: {e}")
-        st.error(f"🔴 Error downloading or extracting Chromium: {e}")
-        return None
-
 # Function to verify Chromium and Chromedriver installations
-def verify_installations(chromium_path, chromedriver_path):
+def verify_installations():
     st.subheader("🔍 Installation Verification")
     
+    # Check Chromium Browser
     st.write("### Chromium Browser")
     try:
-        chrome_version = subprocess.check_output([chromium_path, '--version']).decode('utf-8').strip()
-        st.code(chrome_version)
-    except Exception as e:
-        st.error(f"🔴 Error verifying Chromium installation: {e}")
+        result = subprocess.run(['chromium', '--version'], capture_output=True, text=True, check=True)
+        version = result.stdout.strip()
+        st.code(version)
+    except subprocess.CalledProcessError as e:
+        st.error(f"🔴 Chromium not found or error occurred: {e}")
+        return False
+    except FileNotFoundError:
+        st.error("🔴 Chromium binary not found.")
         return False
     
+    # Check Chromedriver
     st.write("### Chromedriver")
     try:
-        driver_version = subprocess.check_output([chromedriver_path, '--version']).decode('utf-8').strip()
-        st.code(driver_version)
-    except Exception as e:
-        st.error(f"🔴 Error verifying Chromedriver installation: {e}")
+        result = subprocess.run(['chromedriver', '--version'], capture_output=True, text=True, check=True)
+        version = result.stdout.strip()
+        st.code(version)
+    except subprocess.CalledProcessError as e:
+        st.error(f"🔴 Chromedriver not found or error occurred: {e}")
         return False
-    
-    st.write("### Chromium Binary Location")
-    st.code(chromium_path)
-    
-    st.write("### Chromedriver Binary Location")
-    st.code(chromedriver_path)
+    except FileNotFoundError:
+        st.error("🔴 Chromedriver binary not found.")
+        return False
     
     st.success("🟢 **Chromium** and **Chromedriver** are installed correctly.")
     return True
 
 # Utility function to clean text
 def clean_text(text):
-    """
-    Cleans the input text by normalizing unicode characters, removing non-printable characters,
-    and eliminating specific unwanted symbols.
-    """
     if not isinstance(text, str):
         return text
-    # Normalize unicode characters
     text = unicodedata.normalize('NFKD', text)
-    # Remove non-printable characters
     text = ''.join(c for c in text if c.isprintable())
-    # Remove specific unwanted symbols (e.g., (TM), â€)
     text = re.sub(r'\(TM\)', '', text)
     text = re.sub(r'â€', '', text)
-    # Remove any remaining unwanted characters or symbols
-    text = re.sub(r'[^\x00-\x7F]+', '', text)  # Remove non-ASCII characters
-    # Replace multiple spaces with a single space
+    text = re.sub(r'[^\x00-\x7F]+', '', text)
     text = re.sub(r'\s+', ' ', text)
     return text.strip()
 
 # Function to extract linkworthy items
 def extract_linkworthy_items(scraped_content):
-    """
-    Uses OpenAI API to extract linkworthy items (ingredients and other affiliate-linkable items)
-    from scraped content. Returns a plaintext string of items or "n/a" if extraction fails.
-    """
     prompt = (
         "Extract all ingredients and any other items that can be used for affiliate linking "
         "from the following content. Present the results as a comma-separated plaintext list."
     )
-
-    # Combine prompt with scraped content
     full_prompt = f"{prompt}\n\nContent:\n{scraped_content}"
-
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Ensure this model is available
+            model="gpt-4",  # Ensure the model is available
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -132,19 +88,9 @@ def extract_linkworthy_items(scraped_content):
             stop=None,
             temperature=0.5,
         )
-
-        # Extract the assistant's reply
         extracted_data = response.choices[0].message.content.strip()
-
-        # Clean the extracted text
         cleaned_data = clean_text(extracted_data)
-
-        # Check if extraction returned meaningful data
-        if not cleaned_data:
-            return "n/a"
-
-        return cleaned_data
-
+        return cleaned_data if cleaned_data else "n/a"
     except Exception as e:
         st.warning(f"⚠️ Error during OpenAI API call for linkworthy items: {e}")
         logger.error(f"OpenAI API Error for linkworthy items: {e}")
@@ -152,21 +98,14 @@ def extract_linkworthy_items(scraped_content):
 
 # Function to extract title
 def extract_title(scraped_content):
-    """
-    Uses OpenAI API to extract the title from scraped content.
-    Returns the title as plaintext or "n/a" if extraction fails.
-    """
     prompt = (
         "Extract the title of the article from the following content. "
         "Present the result as a single plaintext string."
     )
-
-    # Combine prompt with scraped content
     full_prompt = f"{prompt}\n\nContent:\n{scraped_content}"
-
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Ensure this model is available
+            model="gpt-4",  # Ensure the model is available
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -176,19 +115,9 @@ def extract_title(scraped_content):
             stop=None,
             temperature=0.3,
         )
-
-        # Extract the assistant's reply
         extracted_title = response.choices[0].message.content.strip()
-
-        # Clean the extracted title
         cleaned_title = clean_text(extracted_title)
-
-        # Check if extraction returned meaningful data
-        if not cleaned_title:
-            return "n/a"
-
-        return cleaned_title
-
+        return cleaned_title if cleaned_title else "n/a"
     except Exception as e:
         st.warning(f"⚠️ Error during OpenAI API call for title: {e}")
         logger.error(f"OpenAI API Error for title: {e}")
@@ -196,21 +125,11 @@ def extract_title(scraped_content):
 
 # Function to parse pasted URLs
 def parse_pasted_urls(urls_text):
-    """
-    Parses a string of URLs separated by commas, newlines, or spaces.
-    Returns a list of cleaned URLs.
-    """
-    # Split by comma, newline, or space
     urls = re.split(r'[,\n\s]+', urls_text)
-    # Remove empty strings and strip whitespace
-    urls = [url.strip() for url in urls if url.strip()]
-    return urls
+    return [url.strip() for url in urls if url.strip()]
 
 # Function to validate URLs
 def is_valid_url(url):
-    """
-    Validates the URL format.
-    """
     try:
         result = urlparse(url)
         return all([result.scheme, result.netloc])
@@ -228,31 +147,9 @@ def main():
     - **Paste List**: Paste a list of URLs separated by commas, newlines, or spaces.
     """)
 
-    # Download Chromium
-    chromium_download_url = "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Linux_x64/1170697/chrome-linux.zip"  # Update to a stable version
-    extract_path = "/tmp/chromium"  # Temporary directory
-    if not os.path.exists(extract_path):
-        os.makedirs(extract_path)
-    chromium_binary = download_chromium(chromium_download_url, extract_path)
-    if not chromium_binary:
-        st.error("🔴 Failed to download and extract Chromium.")
-        return
-
-    # Use webdriver-manager to install chromedriver
-    try:
-        st.info("🔄 Installing Chromedriver via webdriver-manager...")
-        chromedriver_path = ChromeDriverManager().install()
-        st.success(f"✅ Chromedriver installed at: {chromedriver_path}")
-    except Exception as e:
-        logger.error(f"Error installing Chromedriver: {e}")
-        st.error(f"🔴 Error installing Chromedriver: {e}")
-        return
-
-    # Verify installations
-    verification_success = verify_installations(chromium_binary, chromedriver_path)
-    if not verification_success:
-        st.error("🔴 Chromium or Chromedriver is not installed correctly.")
-        return
+    # Verify Chromium and Chromedriver installation
+    if not verify_installations():
+        st.stop()  # Stop the app if installations are not verified
 
     # Configure Selenium to run Chromium in headless mode
     chrome_options = Options()
@@ -261,22 +158,18 @@ def main():
     chrome_options.add_argument("--disable-dev-shm-usage")
     chrome_options.add_argument("--disable-gpu")
     chrome_options.add_argument("--window-size=1920,1080")
-    chrome_options.binary_location = chromium_binary
 
-    # Initialize Crawl4AI WebCrawler with LocalSeleniumCrawlerStrategy
+    # Initialize WebDriver using webdriver-manager
     try:
-        service = Service(chromedriver_path)  # Specify Chromedriver path
-        webdriver_instance = webdriver.Chrome(service=service, options=chrome_options)
-        
-        crawler_strategy = LocalSeleniumCrawlerStrategy(driver=webdriver_instance)
+        service = Service(ChromeDriverManager().install())
+        driver = webdriver.Chrome(service=service, options=chrome_options)
+        crawler_strategy = LocalSeleniumCrawlerStrategy(driver=driver)
         crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
         crawler.warmup()
-        logger.info("🟢 Selenium WebDriver initialized successfully.")
         st.success("🟢 Selenium WebDriver initialized successfully.")
     except Exception as e:
-        logger.error(f"Error initializing Selenium WebDriver: {e}")
         st.error(f"🔴 Selenium initialization error: {e}")
-        return
+        st.stop()
 
     # Initialize session state for failed URLs
     if 'failed_urls' not in st.session_state:
