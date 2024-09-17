@@ -8,11 +8,15 @@ from crawl4ai.crawler_strategy import LocalSeleniumCrawlerStrategy
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 from openai import OpenAI
-from io import StringIO, BytesIO
+from io import BytesIO
 from urllib.parse import urlparse
 import logging
 import subprocess
+import requests
+import zipfile
+import shutil
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,75 +24,66 @@ logger = logging.getLogger(__name__)
 
 # Initialize OpenAI Client
 openai_client = OpenAI(
-    api_key=st.secrets["openai_api_key"],  # Reverted to original key storage
+    api_key=st.secrets["openai_api_key"],  # Original key storage
 )
 
-# Function to run shell commands
-def run_command(cmd):
+# Function to download Chromium
+def download_chromium(download_url, extract_path):
     try:
-        output = subprocess.check_output(cmd, shell=True, stderr=subprocess.STDOUT)
-        return output.decode('utf-8').strip()
-    except subprocess.CalledProcessError as e:
-        return f"Error: {e.output.decode('utf-8').strip()}"
+        st.info("🔄 Downloading Chromium...")
+        response = requests.get(download_url, stream=True)
+        zip_path = os.path.join(extract_path, "chromium.zip")
+        with open(zip_path, "wb") as f:
+            shutil.copyfileobj(response.raw, f)
+        st.info("📥 Chromium downloaded successfully.")
+        
+        st.info("📦 Extracting Chromium...")
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_path)
+        st.info("📂 Chromium extracted successfully.")
+        
+        # Clean up the zip file
+        os.remove(zip_path)
+        
+        # Return the path to the Chromium binary
+        chromium_binary = os.path.join(extract_path, "chrome-linux", "chrome")
+        if not os.path.exists(chromium_binary):
+            raise FileNotFoundError("Chromium binary not found after extraction.")
+        
+        return chromium_binary
+    except Exception as e:
+        logger.error(f"Error downloading or extracting Chromium: {e}")
+        st.error(f"🔴 Error downloading or extracting Chromium: {e}")
+        return None
 
-# Function to verify Chromium and Chromium Driver installation
-def verify_installations():
+# Function to verify Chromium and Chromedriver installations
+def verify_installations(chromium_path, chromedriver_path):
     st.subheader("🔍 Installation Verification")
-    st.write("### Chromium Browser")
-    chromium_version = run_command("chromium --version")
-    st.code(chromium_version)
     
-    st.write("### Chromium Driver")
-    chromium_driver_version = run_command("chromium-driver --version")
-    st.code(chromium_driver_version)
+    st.write("### Chromium Browser")
+    try:
+        chrome_version = subprocess.check_output([chromium_path, '--version']).decode('utf-8').strip()
+        st.code(chrome_version)
+    except Exception as e:
+        st.error(f"🔴 Error verifying Chromium installation: {e}")
+        return False
+    
+    st.write("### Chromedriver")
+    try:
+        driver_version = subprocess.check_output([chromedriver_path, '--version']).decode('utf-8').strip()
+        st.code(driver_version)
+    except Exception as e:
+        st.error(f"🔴 Error verifying Chromedriver installation: {e}")
+        return False
     
     st.write("### Chromium Binary Location")
-    chromium_path = run_command("which chromium")
     st.code(chromium_path)
     
-    st.write("### Chromium Driver Binary Location")
-    chromium_driver_path = run_command("which chromium-driver")
-    st.code(chromium_driver_path)
+    st.write("### Chromedriver Binary Location")
+    st.code(chromedriver_path)
     
-    # Check if paths exist
-    if "Error" in chromium_version or "Error" in chromium_driver_version:
-        st.error("🔴 **Chromium** or **Chromium Driver** is not installed correctly.")
-    elif not chromium_path or not chromium_driver_path:
-        st.error("🔴 Could not locate **Chromium** or **Chromium Driver** binaries.")
-    else:
-        st.success("🟢 **Chromium** and **Chromium Driver** are installed correctly.")
-
-# Configure Selenium to run Chromium in headless mode
-chrome_options = Options()
-chrome_options.add_argument("--headless")
-chrome_options.add_argument("--no-sandbox")
-chrome_options.add_argument("--disable-dev-shm-usage")
-chrome_options.add_argument("--disable-gpu")
-chrome_options.add_argument("--window-size=1920,1080")
-
-# Find chromium binary location
-chromium_binary = run_command("which chromium")
-if "Error" in chromium_binary or not chromium_binary:
-    chromium_binary = "/usr/bin/chromium"  # Fallback path
-chrome_options.binary_location = chromium_binary
-
-# Initialize Crawl4AI WebCrawler with LocalSeleniumCrawlerStrategy
-try:
-    chromium_driver_path = run_command("which chromium-driver")
-    if "Error" in chromium_driver_path or not chromium_driver_path:
-        raise Exception("chromium-driver not found.")
-    
-    service = Service(chromium_driver_path)  # Specify Chromium Driver path
-    webdriver_instance = webdriver.Chrome(service=service, options=chrome_options)
-    
-    crawler_strategy = LocalSeleniumCrawlerStrategy(driver=webdriver_instance)
-    crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
-    crawler.warmup()
-    logger.info("🟢 Selenium WebDriver initialized successfully.")
-    st.success("🟢 Selenium WebDriver initialized successfully.")
-except Exception as e:
-    logger.error(f"Error initializing Selenium WebDriver: {e}")
-    st.error(f"🔴 **Selenium initialization error:** {e}")
+    st.success("🟢 **Chromium** and **Chromedriver** are installed correctly.")
+    return True
 
 # Utility function to clean text
 def clean_text(text):
@@ -127,7 +122,7 @@ def extract_linkworthy_items(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Set to gpt-4o-mini as per your request
+            model="gpt-4o-mini",  # Ensure this model is available
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -171,7 +166,7 @@ def extract_title(scraped_content):
 
     try:
         response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",  # Set to gpt-4o-mini as per your request
+            model="gpt-4o-mini",  # Ensure this model is available
             messages=[
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": full_prompt}
@@ -222,51 +217,86 @@ def is_valid_url(url):
     except:
         return False
 
-# Function to verify Chromium Driver installation
-def verify_chromedriver():
-    """
-    Verifies that chromium-driver is installed and accessible.
-    """
-    try:
-        version = subprocess.check_output(['chromium-driver', '--version']).decode('utf-8').strip()
-        st.info(f"Chromium Driver version: {version}")
-    except Exception as e:
-        st.error(f"🔴 **Chromium Driver** not found or not executable: {e}")
-
 # Streamlit App
 def main():
     st.title("🔗 URL Processor and Data Extractor")
-    
+
     st.markdown("""
     ### 📄 Upload a CSV, Enter URLs Manually, or Paste a List of URLs
     - **Upload CSV**: Provide a CSV file with a 'URL' column.
     - **Manual Entry**: Enter URLs one-by-one.
     - **Paste List**: Paste a list of URLs separated by commas, newlines, or spaces.
     """)
-    
-    # Verify Chromium and Chromium Driver installation
-    verify_installations()
-    verify_chromedriver()
-    
+
+    # Download Chromium
+    chromium_download_url = "https://commondatastorage.googleapis.com/chromium-browser-snapshots/Linux_x64/1170697/chrome-linux.zip"  # Update to a stable version
+    extract_path = "/tmp/chromium"  # Temporary directory
+    if not os.path.exists(extract_path):
+        os.makedirs(extract_path)
+    chromium_binary = download_chromium(chromium_download_url, extract_path)
+    if not chromium_binary:
+        st.error("🔴 Failed to download and extract Chromium.")
+        return
+
+    # Use webdriver-manager to install chromedriver
+    try:
+        st.info("🔄 Installing Chromedriver via webdriver-manager...")
+        chromedriver_path = ChromeDriverManager().install()
+        st.success(f"✅ Chromedriver installed at: {chromedriver_path}")
+    except Exception as e:
+        logger.error(f"Error installing Chromedriver: {e}")
+        st.error(f"🔴 Error installing Chromedriver: {e}")
+        return
+
+    # Verify installations
+    verification_success = verify_installations(chromium_binary, chromedriver_path)
+    if not verification_success:
+        st.error("🔴 Chromium or Chromedriver is not installed correctly.")
+        return
+
+    # Configure Selenium to run Chromium in headless mode
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--window-size=1920,1080")
+    chrome_options.binary_location = chromium_binary
+
+    # Initialize Crawl4AI WebCrawler with LocalSeleniumCrawlerStrategy
+    try:
+        service = Service(chromedriver_path)  # Specify Chromedriver path
+        webdriver_instance = webdriver.Chrome(service=service, options=chrome_options)
+        
+        crawler_strategy = LocalSeleniumCrawlerStrategy(driver=webdriver_instance)
+        crawler = WebCrawler(verbose=False, crawler_strategy=crawler_strategy)
+        crawler.warmup()
+        logger.info("🟢 Selenium WebDriver initialized successfully.")
+        st.success("🟢 Selenium WebDriver initialized successfully.")
+    except Exception as e:
+        logger.error(f"Error initializing Selenium WebDriver: {e}")
+        st.error(f"🔴 Selenium initialization error: {e}")
+        return
+
     # Initialize session state for failed URLs
     if 'failed_urls' not in st.session_state:
         st.session_state.failed_urls = []
-    
+
     # File uploader for CSV
     uploaded_file = st.file_uploader("📁 Upload CSV with 'URL' column", type=["csv"])
-    
+
     # Manual entry
     st.subheader("🖊️ Or Enter URLs Manually")
     manual_url = st.text_input("Enter a single URL")
-    
+
     # Paste list of URLs
     st.subheader("📋 Or Paste a List of URLs")
     pasted_urls = st.text_area("Paste your URLs here (separated by commas, newlines, or spaces)")
-    
+
     # Button to start processing
     if st.button("🚀 Process URLs"):
         urls = []
-    
+
         # Handle uploaded CSV
         if uploaded_file is not None:
             try:
@@ -284,7 +314,7 @@ def main():
                         st.warning(f"⚠️ {len(invalid_uploaded_urls)} invalid URLs were skipped from the uploaded CSV.")
             except Exception as e:
                 st.error(f"❌ Error reading CSV file: {e}")
-    
+
         # Handle manual entry
         if manual_url:
             if is_valid_url(manual_url):
@@ -292,7 +322,7 @@ def main():
                 st.success("✅ Added manually entered URL.")
             else:
                 st.warning("⚠️ The manually entered URL is invalid and was skipped.")
-    
+
         # Handle pasted URLs
         if pasted_urls:
             parsed_urls = parse_pasted_urls(pasted_urls)
@@ -302,33 +332,33 @@ def main():
             st.success(f"✅ Added {len(valid_pasted_urls)} valid URLs from pasted list.")
             if invalid_pasted_urls:
                 st.warning(f"⚠️ {len(invalid_pasted_urls)} invalid URLs were skipped from the pasted list.")
-    
+
         if not urls:
             st.error("❌ No valid URLs provided. Please upload a CSV, enter URLs manually, or paste a list of URLs.")
             return
-    
+
         # Remove duplicates
         urls = list(dict.fromkeys(urls))
         st.write(f"📊 **Total unique valid URLs to process:** {len(urls)}")
-    
+
         # Initialize lists for DataFrame
         data = {
             'Headline': [],
             'URL': [],
             'Linkworthy Ingredients': []
         }
-    
+
         # Initialize progress bar
         progress_bar = st.progress(0)
         status_text = st.empty()
-    
+
         # Process each URL
         for idx, url in enumerate(urls):
             status_text.text(f"🔄 Processing URL {idx + 1} of {len(urls)}")
             try:
                 # Scrape the webpage
                 scrape_result = crawler.run(url=url, bypass_cache=True)
-    
+
                 if scrape_result.success:
                     content = scrape_result.extracted_content
                     if not content:
@@ -340,7 +370,7 @@ def main():
                         linkworthy = extract_linkworthy_items(content)
                         if not linkworthy:
                             linkworthy = "n/a"
-    
+
                         # Extract title
                         title = extract_title(content)
                         if not title:
@@ -350,42 +380,42 @@ def main():
                     linkworthy = "n/a"
                     title = "n/a"
                     st.session_state.failed_urls.append(url)
-    
+
                 # Append data
                 data['Headline'].append(title)
                 data['URL'].append(url)
                 data['Linkworthy Ingredients'].append(linkworthy)
-    
+
             except Exception as e:
                 st.warning(f"⚠️ An error occurred while processing URL {url}: {e}")
                 data['Headline'].append("n/a")
                 data['URL'].append(url)
                 data['Linkworthy Ingredients'].append("n/a")
                 st.session_state.failed_urls.append(url)
-    
+
             # Update progress bar
             progress = (idx + 1) / len(urls)
             progress_bar.progress(progress)
-    
+
         # Create DataFrame
         df_output = pd.DataFrame(data)
-    
+
         # Display the updated DataFrame
         st.subheader("📊 Processed Data")
         st.dataframe(df_output)
-    
+
         # Prepare CSV for download
         csv_buffer = BytesIO()
         df_output.to_csv(csv_buffer, index=False)
         csv_buffer.seek(0)
-    
+
         st.download_button(
             label="📥 Download data as CSV",
             data=csv_buffer,
             file_name='processed_data.csv',
             mime='text/csv',
         )
-    
+
         # Display failed URLs if any
         if st.session_state.failed_urls:
             st.subheader("❗ Failed URLs")
