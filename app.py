@@ -72,7 +72,7 @@ def clean_text(text):
 def extract_linkworthy_items(scraped_content):
     prompt = (
         "Extract all ingredients and any other items that can be used for affiliate linking "
-        "from the following content. Present the results as a comma-separated plaintext list."
+        "from the following content. Do not include measurements from ingredients or the number of items if they are present. Present the results as a comma-separated plaintext list."
     )
     full_prompt = f"{prompt}\n\nContent:\n{scraped_content}"
     try:
